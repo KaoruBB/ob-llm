@@ -10,7 +10,7 @@ use-package block for other packages that use this package. you get to use those
 Here is an example with ~llm~, ~ellama~ and ~ob-llm~.
 
 #+begin_src emacs-lisp
-(use-package llm
+(use-package! llm
   :config
   (let* ((haiku (make-llm-claude
                  :key (getenv "ANTHROPIC_API_KEY")
