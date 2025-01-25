@@ -27,6 +27,10 @@
   "Mapping of provider names to llm provider objects.
 Users should populate this with their specific providers.")
 
+(defvar ob-llm-system-prompt
+  "META_PROMPT1: Follow the prompt instructions laid out below. You are an assistant living in the users' emacs. Be helpful to them. Your output will be seen their emacs"
+  "System prompt for the language model.\nUser file: \n")
+
 (defcustom ob-llm-default-provider nil
   "Default provider for llm babel blocks.
 Must be set by the user to one of the registered providers in `ob-llm-providers'."
@@ -70,8 +74,8 @@ Available providers: %s"
           (llm-chat-async
            (ob-llm-get-provider params)
            (llm-make-chat-prompt
-            (format "Context:\n%s\n\nPrompt:\n%s"
-                    context body))
+            (format "META_PROMPT: %s\nContext:\n%s\n\nPrompt:\n%s"
+                    ob-llm-system-prompt context body))
            (lambda (response)
              (with-current-buffer (current-buffer)
                (org-babel-insert-result response llm-stored-params)))
