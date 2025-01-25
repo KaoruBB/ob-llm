@@ -28,8 +28,8 @@
 Users should populate this with their specific providers.")
 
 (defvar ob-llm-system-prompt
-  "META_PROMPT1: Follow the prompt instructions laid out below. You are an assistant living in the users' emacs. Be helpful to them. Your output will be seen their emacs"
-  "System prompt for the language model.\nUser file: \n")
+  "META_PROMPT1: Follow the prompt instructions laid out below. You are an assistant living in the users' emacs. Be helpful to them. Your output will be seen their emacs.\n\n User File: "
+  "System prompt for the language model.")
 
 (defcustom ob-llm-default-provider nil
   "Default provider for llm babel blocks.
