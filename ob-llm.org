@@ -1,3 +1,10 @@
+#+title: ob-llm
+* This is the first subtree
+If the llm can see it it would be nice if it would tell me.
+
+* Initial file
+This is my current ob-llm file:
+#+begin_src emacs-lisp
 ;;; ob-llm.el --- org-babel integration for llm providers
 ;; copyright (c) 2024 Jiyan Joans Schneider
 ;; author: Jiyan Jonas Schneider <mail@jiyanjs.com>
@@ -27,15 +34,12 @@
 
 (defun ob-llm-get-heading-context (element)
   "Get context from the first top-level heading containing ELEMENT."
-  (message "Trying to get heading context")
   (save-excursion
     (goto-char (org-element-property :begin element))
     (let* ((heading (org-element-lineage element '(headline)))
            (top-heading (when heading
                           (while (and heading
-                                      (message "Current heading: %s" heading)
                                       (> (org-element-property :level heading) 1))
-                            (message "Heading: %s" heading)
                             (setq heading (org-element-property :parent heading)))
                           heading)))
       (if top-heading
@@ -83,26 +87,19 @@ Available providers: %s"
     provider))
 
 
-(defun ob-llm-get-subtree-context (element)
-  "Get context from current subtree containing ELEMENT."
-  (save-excursion
-    (goto-char (org-element-property :begin element))
-    (let ((tree-content (org-get-entry))) (or tree-content ""))))
 
 (defun org-babel-execute:llm (body params)
   "Execute a block of llm code with org-babel."
   (let* ((element (org-element-at-point))
          (block-start (org-element-property :begin element))
          (context-type (or (cdr (assq :context params)) "file"))
-         (context (pcase context-type
-                    ("heading" (ob-llm-get-heading-context element))
-                    ("subtree" (ob-llm-get-subtree-context element))
-                    (_ (buffer-substring-no-properties (point-min) block-start)))))
+         (context (if (string= context-type "heading")
+                      (ob-llm-get-heading-context element)
+                    (buffer-substring-no-properties (point-min) block-start))))
     (if (assq :async params)
         (let ((context context)) ; Store context in let binding
           (with-current-buffer (current-buffer)
             (setq-local llm-stored-params params)
-            ;; (message "context %s" context)
             (org-babel-insert-result "Loading..." llm-stored-params))
           (llm-chat-async
            (ob-llm-get-provider params)
@@ -127,3 +124,40 @@ Available providers: %s"
 
 (provide 'ob-llm)
 ;;; ob-llm.el ends here
+
+#+end_src
+
+
+#+begin_src llm :provider sonnet
+I want to add some features. The first feature I want to add is a way to only use the current subtree (Going from the current H1 header) into the conversation.
+
+Before that though, since LLM's seem to like XML more than raw org mode files, I wondered if its possible to get the "AST" of an org file. Is there a function to do that?
+#+end_src
+
+#+RESULTS:
+#+begin_example
+Yes! Org-mode has excellent AST capabilities through `org-element-parse-buffer`. You can also use `org-element-at-point` for the current element.
+
+For XML-like output, you can use `org-element-parse-buffer 'object)` and then `org-element-to-xml`.
+
+Want me to show you how to modify your code to use this?
+#+end_example
+
+I think I can use it like this.
+#+begin_src emacs-lisp :results drawer
+(with-current-buffer "ob-llm.org"
+         (org-element-parse-buffer))
+#+end_src
+
+#+RESULTS:
+:results:
+(org-data (:standard-properties [1 1 1 6017 6017 0 nil org-data nil nil nil 3 6017 nil ob-llm.org nil nil nil] :path /Users/jjs/tools/ob-llm/ob-llm.org :CATEGORY ob-llm) (section (:standard-properties [1 1 1 17 17 0 nil first-section nil nil nil 1 17 nil ob-llm.org nil nil #0]) (keyword (:standard-properties [1 1 nil nil 17 0 nil top-comment nil nil nil nil nil nil ob-llm.org nil nil #1] :key TITLE :value ob-llm))) (headline (:standard-properties [17 17 45 106 106 0 (:title) nil nil nil nil 47 104 1 ob-llm.org nil nil #0] :pre-blank 0 :raw-value This is the first subtree :title (This is the first subtree) :level 1 :priority nil :tags nil :todo-keyword nil :todo-type nil :footnote-section-p nil :archivedp nil :commentedp nil) (section (:standard-properties [45 45 45 106 106 0 nil section nil nil nil 45 106 nil ob-llm.org nil nil #1]) (paragraph (:standard-properties [45 45 45 105 106 1 nil planning nil nil nil nil nil nil ob-llm.org nil nil #2]) If the llm can see it it would be nice if it would tell me.
+))) (headline (:standard-properties [106 106 121 6017 6017 0 (:title) nil nil nil nil 123 6015 1 ob-llm.org nil nil #0] :pre-blank 0 :raw-value Initial file :title (Initial file) :level 1 :priority nil :tags nil :todo-keyword nil :todo-type nil :footnote-section-p nil :archivedp nil :commentedp nil) (section (:standard-properties [121 121 121 6017 6017 0 nil section nil nil nil 121 6017 nil ob-llm.org nil nil #1]) (paragraph (:standard-properties [121 121 121 153 153 0 nil planning nil nil nil nil nil nil ob-llm.org nil nil #2]) This is my current ob-llm file:
+) (src-block (:standard-properties [153 153 nil nil 4928 2 nil nil nil nil nil nil nil nil ob-llm.org nil nil #
+:end:
+
+Ohh yes, this is the result for the current file (Shortened). it seems to be working just fine.
+
+#+begin_src llm :provider sonnet
+I want to think about how to best build this functionality for ob-llm.
+#+end_src
