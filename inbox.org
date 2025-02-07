@@ -1,33 +1,11 @@
 * Inbox
-** TODO something like llama.vim or llama.vscode would be also really cool for emacs
-:PROPERTIES:
-:ID:       addf8044-a089-40b4-b1de-55696ea08fc2
-:END:
-
-[[file:~/tools/ob-llm/ob-llm.el:::session . "none"]]
-** TODO add insertion at point via prefill
-:PROPERTIES:
-:ID:       dd725539-a708-4686-87e9-578cfb0488f4
-:END:
-
-[[file:~/tools/ob-llm/ob-llm.el:::session . "none"]]
-** TODO Add caching of contexts?
-:PROPERTIES:
-:ID:       be0d4393-5194-4408-8fb0-760d60475363
-:END:
-[[file:~/tools/ob-llm/ob-llm.el:::session . "none"]]
-** TODO Make it possible to add pictures / pdfs to the context correctly
-:PROPERTIES:
-:ID:       f2e073d8-f4ed-4d36-b0ed-58201bb5d6be
-:END:
-
-[[file:~/tools/ob-llm/ob-llm.el:::session . "none"]]
-** TODO Option for only including current headline in context
-:PROPERTIES:
-:ID:       ea8ae442-16e8-4608-bae2-30d51b0af24c
-:END:
+** DONE Option for only including current headline in context
  - Or maybe defining subtree contexts or something ..?
  - Maybe  we could use org-ref infrastructure here?
-
-
-[[file:~/tools/ob-llm/ob-llm.el:::session . "none"]]
+** TODO something like llama.vim or llama.vscode would be also really cool for emacs
+** TODO add insertion at point via prefill
+** TODO Add caching of contexts?
+** TODO Make it possible to add pictures / pdfs to the context correctly
+** TODO Make streaming work
+** TODO Remove the bug where llm doesn't give the result if you move the cursor too much
+** TODO Make multiple execution replace the previous result
