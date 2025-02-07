@@ -20,30 +20,8 @@
 (defvar org-babel-default-header-args:llm
   '((:async . "yes")
     (:results . "replace raw")
-    (:session . "none")
-    (:context . "file"))
+    (:session . "none"))
   "Default arguments for llm source blocks.")
-
-
-(defun ob-llm-get-heading-context (element)
-  "Get context from the first top-level heading containing ELEMENT."
-  (message "Trying to get heading context")
-  (save-excursion
-    (goto-char (org-element-property :begin element))
-    (let* ((heading (org-element-lineage element '(headline)))
-           (top-heading (when heading
-                          (while (and heading
-                                      (message "Current heading: %s" heading)
-                                      (> (org-element-property :level heading) 1))
-                            (message "Heading: %s" heading)
-                            (setq heading (org-element-property :parent heading)))
-                          heading)))
-      (if top-heading
-          (buffer-substring-no-properties
-           (org-element-property :begin top-heading)
-           (org-element-property :begin element))
-        ""))))
-
 
 (defvar ob-llm-providers nil
   "Mapping of provider names to llm provider objects.
@@ -83,26 +61,15 @@ Available providers: %s"
     provider))
 
 
-(defun ob-llm-get-subtree-context (element)
-  "Get context from current subtree containing ELEMENT."
-  (save-excursion
-    (goto-char (org-element-property :begin element))
-    (let ((tree-content (org-get-entry))) (or tree-content ""))))
 
 (defun org-babel-execute:llm (body params)
   "Execute a block of llm code with org-babel."
   (let* ((element (org-element-at-point))
-         (block-start (org-element-property :begin element))
-         (context-type (or (cdr (assq :context params)) "file"))
-         (context (pcase context-type
-                    ("heading" (ob-llm-get-heading-context element))
-                    ("subtree" (ob-llm-get-subtree-context element))
-                    (_ (buffer-substring-no-properties (point-min) block-start)))))
+         (block-start (org-element-property :begin element)))
     (if (assq :async params)
-        (let ((context context)) ; Store context in let binding
+        (let ((context (buffer-substring-no-properties (point-min) block-start)))
           (with-current-buffer (current-buffer)
             (setq-local llm-stored-params params)
-            ;; (message "context %s" context)
             (org-babel-insert-result "Loading..." llm-stored-params))
           (llm-chat-async
            (ob-llm-get-provider params)
@@ -117,9 +84,12 @@ Available providers: %s"
                (org-babel-insert-result
                 (format "Error: %s - %s" err msg) llm-stored-params))))
           nil)
-      (llm-chat
-       (ob-llm-get-provider params)
-       (llm-make-chat-prompt (format "Context:\n%s\n\nPrompt:\n%s" context body))))))
+      (let ((context (buffer-substring-no-properties (point-min) block-start)))
+        (llm-chat
+         (ob-llm-get-provider params)
+         (llm-make-chat-prompt
+          (format "Context:\n%s\n\nPrompt:\n%s"
+                  context body)))))))
 
 ;; register the language
 (add-to-list 'org-babel-load-languages '(llm . t))
