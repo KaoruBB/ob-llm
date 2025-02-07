@@ -1,9 +1,10 @@
 #+title: ob-llm
-* This is the first subtree
-If the llm can see it it would be nice if it would tell me.
+* ob-llm
+:PROPERTIES:
+:header-args:emacs-lisp: :tangle ob-llm.el
+:END:
 
-* Initial file
-This is my current ob-llm file:
+** Preamble, and requirements.
 #+begin_src emacs-lisp
 ;;; ob-llm.el --- org-babel integration for llm providers
 ;; copyright (c) 2024 Jiyan Joans Schneider
@@ -19,7 +20,15 @@ This is my current ob-llm file:
 (require 'ob)
 (require 'llm)
 (require 'org-element)
+#+end_src
 
+#+RESULTS:
+: org-element
+
+** defvars and defgroups
+Here we define the group and some variables.
+I think this is mostly done for customization.
+#+begin_src emacs-lisp
 (defgroup ob-llm nil
   "llm babel integration"
   :group 'external)
@@ -30,24 +39,6 @@ This is my current ob-llm file:
     (:session . "none")
     (:context . "file"))
   "Default arguments for llm source blocks.")
-
-
-(defun ob-llm-get-heading-context (element)
-  "Get context from the first top-level heading containing ELEMENT."
-  (save-excursion
-    (goto-char (org-element-property :begin element))
-    (let* ((heading (org-element-lineage element '(headline)))
-           (top-heading (when heading
-                          (while (and heading
-                                      (> (org-element-property :level heading) 1))
-                            (setq heading (org-element-property :parent heading)))
-                          heading)))
-      (if top-heading
-          (buffer-substring-no-properties
-           (org-element-property :begin top-heading)
-           (org-element-property :begin element))
-        ""))))
-
 
 (defvar ob-llm-providers nil
   "Mapping of provider names to llm provider objects.
@@ -63,6 +54,18 @@ Must be set by the user to one of the registered providers in `ob-llm-providers'
   :type '(choice (const :tag "Not Set" nil)
           (string :tag "Provider Name"))
   :group 'ob-llm)
+#+end_src
+
+#+RESULTS:
+: ob-llm-default-provider
+
+** Dealing with the Provider
+
+We want to use ~llm.el~ as a backend and so we will just use llm providers.
+
+#+begin_src emacs-lisp
+(defun ob-llm-extract-provider (provider providers)
+  (alist-get provider providers nil nil #'string=))
 
 (defun ob-llm-get-provider (params)
   "Get the llm provider from PARAMS or default.
@@ -71,11 +74,10 @@ Raises an error with helpful instructions if no provider found."
          (provider (cond
                     ;; If a provider is specified in params, look it up by name
                     (provider-param
-                     (cdr (assoc provider-param ob-llm-providers)))
+                     (ob-llm-extract-provider provider-param ob-llm-providers))
                     ;; If default provider is already a provider object, use it directly
                     ((and ob-llm-default-provider
-                          (not (stringp ob-llm-default-provider)))
-                     ob-llm-default-provider)
+                          (not (stringp ob-llm-default-provider))) ob-llm-default-provider)
                     ;; If default provider is a string, look it up
                     (ob-llm-default-provider
                      (cdr (assoc ob-llm-default-provider ob-llm-providers))))))
@@ -83,23 +85,51 @@ Raises an error with helpful instructions if no provider found."
       (error "No LLM provider found.
 Please set `ob-llm-default-provider' or provide a :provider parameter.
 Available providers: %s"
-             (mapcar #'car ob-llm-providers)))
-    provider))
+             (mapcar #'car ob-llm-providers))) provider))
+#+end_src
 
+#+RESULTS:
+: ob-llm-get-provider
 
+Usage, input and output are like this:
+#+begin_src emacs-lisp :tangle tests/ob-llm-test.el
+(ert-deftest ob-llm-test-extract-provider ()
+  (let ((qwen-provider (ob-llm-extract-provider 'qwen ob-llm-providers)))
+    (should qwen-provider)
+    (should (eq (type-of qwen-provider) 'llm-ollama))
+    (should (string-match-p "qwen" (format "%S" qwen-provider)))))
+#+end_src
 
+#+RESULTS:
+: ob-llm-test-extract-provider
+
+Next, I want to write a test for the get-provider function
+
+#+begin_src emacs-lisp :tangle tests/ob-llm-test.el
+(ert-deftest ob-llm-test-get-provider ()
+    ;; Test getting provider by default
+    (should (ob-llm-get-provider '(haiku))))
+#+end_src
+
+#+RESULTS:
+: ob-llm-test-get-provider
+
+** Executing the llm
+
+#+begin_src emacs-lisp
 (defun org-babel-execute:llm (body params)
   "Execute a block of llm code with org-babel."
   (let* ((element (org-element-at-point))
          (block-start (org-element-property :begin element))
          (context-type (or (cdr (assq :context params)) "file"))
-         (context (if (string= context-type "heading")
-                      (ob-llm-get-heading-context element)
-                    (buffer-substring-no-properties (point-min) block-start))))
+         (context (pcase context-type
+                    ("heading" (ob-llm-get-heading-context element))
+                    (_ (buffer-substring-no-properties (point-min) block-start)))))
     (if (assq :async params)
         (let ((context context)) ; Store context in let binding
           (with-current-buffer (current-buffer)
             (setq-local llm-stored-params params)
+            ;; (message "context %s" context)
             (org-babel-insert-result "Loading..." llm-stored-params))
           (llm-chat-async
            (ob-llm-get-provider params)
@@ -117,47 +147,111 @@ Available providers: %s"
       (llm-chat
        (ob-llm-get-provider params)
        (llm-make-chat-prompt (format "Context:\n%s\n\nPrompt:\n%s" context body))))))
+#+end_src
 
+#+RESULTS:
+: org-babel-execute:llm
+
+#+begin_src emacs-lisp :tangle tests/ob-llm-test.el
+(ert-deftest ob-llm-test-extract-provider ()
+  (let ((params '((:async . nil) (:provider . "qwen")))
+        (body "What is 2+2?"))
+    (should (stringp (org-babel-execute:llm body params)))))
+#+end_src
+
+#+RESULTS:
+: ob-llm-test-extract-provider
+
+** Functions for playing with the context Context
+
+#+begin_src emacs-lisp
+(defun ob-llm-get-heading-context (element)
+  "Get context from current top-level heading to ELEMENT's begin."
+  (save-excursion
+    (goto-char (org-element-property :begin element))
+    (let* ((heading (org-element-lineage element '(headline)))
+           (top-heading (when heading
+                          (while (and heading (> (org-element-property :level heading) 1))
+                            (setq heading (org-element-property :parent heading)))
+                          heading)))
+      (if top-heading
+          (buffer-substring-no-properties
+           (org-element-property :begin top-heading)
+           (org-element-property :end element))
+        ""))))
+#+end_src
+
+#+RESULTS:
+: ob-llm-get-heading-context
+
+#+begin_src emacs-lisp :tangle no
+(with-temp-buffer
+  (org-mode)
+  (insert "*FIRST HEADLINE \n* Top\nsome content\n** Sub\nmore stuff\n*** Here\nfinal text\n* Another headline \n HERE")
+  (goto-char 50)
+  (ob-llm-get-heading-context (org-element-at-point)))
+#+end_src
+
+#+RESULTS:
+#+begin_example
+,* Top
+some content
+,** Sub
+more stuff
+#+end_example
+
+
+#+begin_src emacs-lisp :tangle no
+(with-temp-buffer
+  (org-mode)
+  (insert "*FIRST HEADLINE \n* Top\nsome content\n** Sub\nmore stuff\n*** Here\nfinal text\n* Another headline \n HERE")
+  (goto-char (point-max))
+  (ob-llm-get-heading-context (org-element-at-point)))
+
+#+end_src
+
+#+RESULTS:
+: * Another headline
+:  HERE
+
+#+begin_src emacs-lisp :tangle tests/ob-llm-test.el
+(ert-deftest ob-llm-test-heading-context ()
+  (with-temp-buffer
+    (org-mode)
+    (insert "*FIRST HEADLINE \n* Top\nsome content\n** Sub\nmore stuff\n*** Here\nfinal text\n* Another headline \n HERE")
+    (goto-char 50)
+    (should (string= (ob-llm-get-heading-context (org-element-at-point))
+                     "* Top\nsome content\n** Sub\nmore stuff\n"))
+    (goto-char (point-max))
+    (should (string= (ob-llm-get-heading-context (org-element-at-point))
+                     "* Another headline\n HERE"))))
+#+end_src
+
+#+RESULTS:
+: ob-llm-test-heading-context
+
+** Postamble
+
+#+begin_src emacs-lisp
 ;; register the language
 (add-to-list 'org-babel-load-languages '(llm . t))
 (org-babel-do-load-languages 'org-babel-load-languages org-babel-load-languages)
 
 (provide 'ob-llm)
 ;;; ob-llm.el ends here
-
-#+end_src
-
-
-#+begin_src llm :provider sonnet
-I want to add some features. The first feature I want to add is a way to only use the current subtree (Going from the current H1 header) into the conversation.
-
-Before that though, since LLM's seem to like XML more than raw org mode files, I wondered if its possible to get the "AST" of an org file. Is there a function to do that?
 #+end_src
 
 #+RESULTS:
-#+begin_example
-Yes! Org-mode has excellent AST capabilities through `org-element-parse-buffer`. You can also use `org-element-at-point` for the current element.
+: ob-llm
 
-For XML-like output, you can use `org-element-parse-buffer 'object)` and then `org-element-to-xml`.
+* Other useful stuff for myself
+Change the "current buffer for execution of some functions
 
-Want me to show you how to modify your code to use this?
-#+end_example
-
-I think I can use it like this.
-#+begin_src emacs-lisp :results drawer
-(with-current-buffer "ob-llm.org"
-         (org-element-parse-buffer))
+#+begin_src emacs-lisp :tangle no
+(with-temp-buffer
+    (insert "*FIRST HEADLINE \n* Top\nsome content\n** Sub\nmore stuff\n*** Here\nfinal text\n* Another headline \n HERE")
+    (cadr (org-element-parse-buffer))
 #+end_src
 
 #+RESULTS:
-:results:
-(org-data (:standard-properties [1 1 1 6017 6017 0 nil org-data nil nil nil 3 6017 nil ob-llm.org nil nil nil] :path /Users/jjs/tools/ob-llm/ob-llm.org :CATEGORY ob-llm) (section (:standard-properties [1 1 1 17 17 0 nil first-section nil nil nil 1 17 nil ob-llm.org nil nil #0]) (keyword (:standard-properties [1 1 nil nil 17 0 nil top-comment nil nil nil nil nil nil ob-llm.org nil nil #1] :key TITLE :value ob-llm))) (headline (:standard-properties [17 17 45 106 106 0 (:title) nil nil nil nil 47 104 1 ob-llm.org nil nil #0] :pre-blank 0 :raw-value This is the first subtree :title (This is the first subtree) :level 1 :priority nil :tags nil :todo-keyword nil :todo-type nil :footnote-section-p nil :archivedp nil :commentedp nil) (section (:standard-properties [45 45 45 106 106 0 nil section nil nil nil 45 106 nil ob-llm.org nil nil #1]) (paragraph (:standard-properties [45 45 45 105 106 1 nil planning nil nil nil nil nil nil ob-llm.org nil nil #2]) If the llm can see it it would be nice if it would tell me.
-))) (headline (:standard-properties [106 106 121 6017 6017 0 (:title) nil nil nil nil 123 6015 1 ob-llm.org nil nil #0] :pre-blank 0 :raw-value Initial file :title (Initial file) :level 1 :priority nil :tags nil :todo-keyword nil :todo-type nil :footnote-section-p nil :archivedp nil :commentedp nil) (section (:standard-properties [121 121 121 6017 6017 0 nil section nil nil nil 121 6017 nil ob-llm.org nil nil #1]) (paragraph (:standard-properties [121 121 121 153 153 0 nil planning nil nil nil nil nil nil ob-llm.org nil nil #2]) This is my current ob-llm file:
-) (src-block (:standard-properties [153 153 nil nil 4928 2 nil nil nil nil nil nil nil nil ob-llm.org nil nil #
-:end:
-
-Ohh yes, this is the result for the current file (Shortened). it seems to be working just fine.
-
-#+begin_src llm :provider sonnet
-I want to think about how to best build this functionality for ob-llm.
-#+end_src
+| :standard-properties | [1 1 1 100 100 0 nil org-data nil nil nil 3 100 nil #<killed buffer> nil nil nil] | :path | nil | :CATEGORY | nil |

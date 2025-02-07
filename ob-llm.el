@@ -24,8 +24,6 @@
     (:context . "file"))
   "Default arguments for llm source blocks.")
 
-
-
 (defvar ob-llm-providers nil
   "Mapping of provider names to llm provider objects.
 Users should populate this with their specific providers.")
@@ -41,6 +39,9 @@ Must be set by the user to one of the registered providers in `ob-llm-providers'
           (string :tag "Provider Name"))
   :group 'ob-llm)
 
+(defun ob-llm-extract-provider (provider providers)
+  (alist-get provider providers nil nil #'string=))
+
 (defun ob-llm-get-provider (params)
   "Get the llm provider from PARAMS or default.
 Raises an error with helpful instructions if no provider found."
@@ -48,11 +49,10 @@ Raises an error with helpful instructions if no provider found."
          (provider (cond
                     ;; If a provider is specified in params, look it up by name
                     (provider-param
-                     (cdr (assoc provider-param ob-llm-providers)))
+                     (ob-llm-extract-provider provider-param ob-llm-providers))
                     ;; If default provider is already a provider object, use it directly
                     ((and ob-llm-default-provider
-                          (not (stringp ob-llm-default-provider)))
-                     ob-llm-default-provider)
+                          (not (stringp ob-llm-default-provider))) ob-llm-default-provider)
                     ;; If default provider is a string, look it up
                     (ob-llm-default-provider
                      (cdr (assoc ob-llm-default-provider ob-llm-providers))))))
@@ -60,23 +60,7 @@ Raises an error with helpful instructions if no provider found."
       (error "No LLM provider found.
 Please set `ob-llm-default-provider' or provide a :provider parameter.
 Available providers: %s"
-             (mapcar #'car ob-llm-providers)))
-    provider))
-
-(defun ob-llm-get-heading-context (element)
-  "Get context from current top-level heading to ELEMENT's begin."
-  (save-excursion
-    (goto-char (org-element-property :begin element))
-    (let* ((heading (org-element-lineage element '(headline)))
-           (top-heading (when heading
-                          (while (and heading (> (org-element-property :level heading) 1))
-                            (setq heading (org-element-property :parent heading)))
-                          heading)))
-      (if top-heading
-          (buffer-substring-no-properties
-           (org-element-property :begin top-heading)
-           (org-element-property :end element))
-        ""))))
+             (mapcar #'car ob-llm-providers))) provider))
 
 (defun org-babel-execute:llm (body params)
   "Execute a block of llm code with org-babel."
@@ -108,6 +92,21 @@ Available providers: %s"
       (llm-chat
        (ob-llm-get-provider params)
        (llm-make-chat-prompt (format "Context:\n%s\n\nPrompt:\n%s" context body))))))
+
+(defun ob-llm-get-heading-context (element)
+  "Get context from current top-level heading to ELEMENT's begin."
+  (save-excursion
+    (goto-char (org-element-property :begin element))
+    (let* ((heading (org-element-lineage element '(headline)))
+           (top-heading (when heading
+                          (while (and heading (> (org-element-property :level heading) 1))
+                            (setq heading (org-element-property :parent heading)))
+                          heading)))
+      (if top-heading
+          (buffer-substring-no-properties
+           (org-element-property :begin top-heading)
+           (org-element-property :end element))
+        ""))))
 
 ;; register the language
 (add-to-list 'org-babel-load-languages '(llm . t))
